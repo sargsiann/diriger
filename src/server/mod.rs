@@ -1,5 +1,2 @@
-mod structs;
-
-pub fn main() {
-    println!("Hello from server!");
-}
+pub mod structs;
+pub use structs::Server;

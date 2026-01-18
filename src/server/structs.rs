@@ -1,80 +1,118 @@
+// Includeing standard tcplistener and tcpstream
+use std::net::TcpListener;
 use std::net::TcpStream;
-use std::time::SystemTime;
-use std::collections::HashMap;
-use crate::client::structs::ClientInfo;
+// Including chrono for date and time
+use chrono::{DateTime, Local};
+//including std::io for read and write
+use std::io::{Read, Write};
 
 
-struct ServerInfo {
-	pub stream: TcpStream,
-	pub time_created: SystemTime,
+pub struct Server {
+	pub information: TcpListener, // the server listener struct
+	pub time_created: DateTime<Local>, // the time the server was created
 }
 
-impl ServerInfo {
-	pub fn new(stream: TcpStream) -> Self {
-		Self { stream, time_created: SystemTime::now(), time_last_activity: SystemTime::now() }
+// the Result <String, std::io::Error> for the client_read and client_write methods
+// means that the methods can return a string or an error
+
+// methods for the server struct
+impl Server {
+
+	// constructor for the server struct
+	pub fn new(information: TcpListener) -> Self {
+		Self { information: information, time_created: Local::now() }
 	}
 
-	pub fn get_stream(&self) -> &TcpStream {
-		&self.stream
+	//private method to read from the client
+	fn client_read(&self, client: &mut TcpStream) -> Result<String, std::io::Error> {
+		// mutable buffer to read from the client
+		let mut buffer = [0; 1024];
+		// read from the client
+		match client.read(&mut buffer) {
+			// if the client disconnected
+			Ok(0) => {
+				return Ok(String::new());
+			}
+			// if the client sent data
+			Ok(n) => {
+				// return the data as a string
+				return Ok(String::from_utf8_lossy(&buffer[..n]).to_string());
+			}
+			// if there was an error reading from the client
+			Err(e) => {
+				return Err(e);
+			}
+		}
 	}
 
-	pub fn get_time_created(&self) -> SystemTime {
-		self.time_created
+	//private method to write to the client
+	fn client_write(&self, client: &mut TcpStream, message: &str) -> Result<(), std::io::Error> {
+		// write to the client
+		match client.write(message.as_bytes()) {
+			// if the client sent data
+			Ok(n) => {
+				// return success
+				return Ok(());
+			}
+			// if there was an error writing to the client
+			Err(e) => {
+				return Err(e);
+			}
+		}
 	}
 
-	pub fn set_stream(&mut self, stream: TcpStream) {
-		self.stream = stream
+	//private method to handle the client
+	fn handle_client(&self, client: &mut TcpStream) {
+		// loop to read from the client each time
+		println!("Handling client {}", client.peer_addr().unwrap());
+		loop {
+			// read from the client
+			let message = self.client_read(client);
+			match message {
+				Ok(message) => {
+					// if message is empty, the client disconnected
+					if message.is_empty() {
+						println!("Client disconnected");
+						break;
+					}
+					// print the message received from the client
+					println!("Received {}", message);
+					// write to the client
+					match self.client_write(client, &message) {
+						// if the client sent data
+						Ok(()) => {
+							// print success
+							println!("Sent Back: {}", message);
+						}
+						// if there was an error writing to the client
+						Err(e) => {
+							println!("Error: {}", e);
+						}
+					}
+				}
+				// if there was an error reading from the client
+				Err(e) => {
+					println!("Error: {}", e);
+					break;
+				}
+			}
+		}
 	}
 
-	pub fn set_time_created(&mut self, time_created: SystemTime) {
-		self.time_created = time_created
-	}
-}
-
-struct ConnectionInfo {
-	pub	store: bool,
-	pub is_active: bool,
-	pub session_id: String,
-	pub client: ClientInfo,
-	pub server: ServerInfo	,
-	pub time_created: SystemTime,
-	pub time_last_activity: SystemTime,
-}
-
-impl ConnectionInfo {
-	pub fn new(client: ClientInfo, server: ServerInfo) -> Self {
-		Self { client, server }
-	}
-
-	pub fn get_store(&self) -> bool {
-		self.store
-	}
-
-	pub fn get_session_id(&self) -> &String {
-		&self.session_id
-	}
-
-	pub fn get_time_created(&self) -> SystemTime {
-		self.time_created
-	}
-
-	pub fn get_time_last_activity(&self) -> SystemTime {
-		self.time_last_activity
-	}
-
-	pub fn set_store(&mut self, store: bool) {
-		self.store = store
-	}
-
-	pub fn set_session_id(&mut self, session_id: String) {
-		self.session_id = session_id
-	}
-
-	pub fn set_time_created(&mut self, time_created: SystemTime) {
-		self.time_created = time_created
-	}
-
-	pub fn set_time_last_activity(&mut self, time_last_activity: SystemTime) {
-		self.time_last_activity = time_last_activity
+	//public method to run the server
+	pub fn run(&self) {
+		// loop to accept new clients
+		for client in self.information.incoming() {
+			// accept the client
+			match client {
+				Ok(mut client) => {
+					// handle the client
+					self.handle_client(&mut client);
+				}
+				Err(e) => {
+					println!("Error: {}", e);
+				}
+			}
+		}
 	}
 }
